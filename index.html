@@ -56,6 +56,16 @@
   .ph-arrow{color:var(--green);font-size:20px;font-weight:700}
   .note{font-size:12px;color:var(--muted);text-align:center;margin-top:20px;line-height:1.5}
   .again{margin-top:16px;background:none;border:none;color:var(--green);font:600 14px Inter,sans-serif;cursor:pointer;text-decoration:underline}
+  #shot{background:#fff;padding:16px 10px 14px;border-radius:14px}
+  .shot-brand{display:none;align-items:center;justify-content:center;gap:8px;margin-bottom:14px}
+  .brand-logo.sm{width:28px;height:28px;border-radius:8px;font-size:14px}
+  .brand-name.sm{font-size:17px}
+  .shot-foot{display:none;font-size:11px;color:var(--muted);margin-top:16px;line-height:1.5}
+  #shot.capturing .shot-brand{display:flex}
+  #shot.capturing .shot-foot{display:block}
+  .btn-print{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;margin-top:16px;background:var(--navy);color:#fff;border:none;border-radius:12px;padding:13px;font:700 15px Inter,sans-serif;cursor:pointer}
+  .btn-print svg{width:19px;height:19px}
+  .btn-print:disabled{opacity:.6;cursor:wait}
   /* modal */
   .overlay{position:fixed;inset:0;background:rgba(15,22,40,.55);display:none;align-items:flex-end;justify-content:center;z-index:10;padding:14px}
   .overlay.open{display:flex;animation:fadeBg .2s}
@@ -99,6 +109,8 @@
     <div class="loading" id="loading"><div class="spinner"></div>Consultando CPF…</div>
 
     <div id="result">
+      <div id="shot">
+      <div class="shot-brand"><div class="brand-logo sm">F</div><div class="brand-name sm">Facilita <span>Cell</span></div></div>
       <div class="badge">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-1.2 14.2-4-4 1.4-1.4 2.6 2.6 5.6-5.6 1.4 1.4-7 7Z"/></svg>
         APROVADO
@@ -107,6 +119,13 @@
       <div class="value"><small>R$</small><strong id="limit">0,00</strong></div>
       <div class="value-label">VALOR APROVADO</div>
       <div class="chips"><div class="chip">Até 18x</div><div class="chip">Boleto</div><div class="chip">PIX</div></div>
+      <div class="shot-foot">Consulta em <span id="shotDate"></span><br>*Simulação ilustrativa. Limite real consultado na loja.</div>
+      </div>
+
+      <button class="btn-print" id="printBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        <span>Salvar print</span>
+      </button>
 
       <h3>Aparelhos aprovados</h3>
       <div class="phones" id="phones"></div>
@@ -133,6 +152,7 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
 const PHONES = [
   { name:"Samsung Galaxy A56 5G", spec:"256GB", price:2700,
@@ -204,6 +224,46 @@ $("phones").addEventListener("click", e => {
   $("mZero").style.display = entry === 0 ? "block" : "none";
   $("overlay").classList.add("open");
 });
+
+// ===== Salvar print da consulta =====
+$("printBtn").addEventListener("click", async () => {
+  const btn = $("printBtn"), label = btn.querySelector("span");
+  btn.disabled = true; label.textContent = "Gerando imagem…";
+  const shot = $("shot");
+  const now = new Date();
+  $("shotDate").textContent = now.toLocaleDateString("pt-BR") + " às " + now.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+  shot.classList.add("capturing");
+  try {
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    const canvas = await html2canvas(shot, { scale: 3, backgroundColor: "#ffffff" });
+    const blob = await new Promise(r => canvas.toBlob(r, "image/png"));
+    const cpf = $("cpfShow").textContent.replace(/\D/g,"");
+    const fileName = `consulta-facilita-cell-${cpf}.png`;
+    const file = new File([blob], fileName, { type: "image/png" });
+    // No celular: abre o menu de compartilhar (WhatsApp, Galeria…)
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: "Consulta Facilita Cell" }); }
+      catch (e) { if (e.name !== "AbortError") download(blob, fileName); }
+    } else {
+      download(blob, fileName);
+    }
+    label.textContent = "Print salvo ✓";
+  } catch (e) {
+    console.error(e);
+    label.textContent = "Erro ao gerar — tente de novo";
+  } finally {
+    shot.classList.remove("capturing");
+    btn.disabled = false;
+    setTimeout(() => label.textContent = "Salvar print", 2500);
+  }
+});
+function download(blob, name){
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
 
 $("close").onclick = () => $("overlay").classList.remove("open");
 $("overlay").addEventListener("click", e => { if(e.target.id==="overlay") $("overlay").classList.remove("open"); });
