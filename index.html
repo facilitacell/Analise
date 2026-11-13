@@ -119,12 +119,12 @@
       <div class="value"><small>R$</small><strong id="limit">0,00</strong></div>
       <div class="value-label">VALOR APROVADO</div>
       <div class="chips"><div class="chip">Até 18x</div><div class="chip">Boleto</div><div class="chip">PIX</div></div>
-      <div class="shot-foot">Consulta em <span id="shotDate"></span><br>*Simulação ilustrativa. Limite real consultado na loja.</div>
+      <div class="shot-foot">Consulta em <span id="shotDate"></span><br><b>Válido por 24h</b> · Finalizar com documentação em loja</div>
       </div>
 
       <button class="btn-print" id="printBtn" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        <span>Salvar print</span>
+        <span>Copiar print</span>
       </button>
 
       <h3>Aparelhos aprovados</h3>
@@ -133,7 +133,7 @@
       <button class="again" id="again">Nova consulta</button>
     </div>
 
-    <p class="note">*Simulação ilustrativa. O limite real é consultado na loja a partir do CPF e varia de cliente para cliente.</p>
+    <p class="note"><b>Válido por 24h</b> · Finalizar com documentação em loja</p>
   </div></div>
 </div>
 
@@ -225,10 +225,10 @@ $("phones").addEventListener("click", e => {
   $("overlay").classList.add("open");
 });
 
-// ===== Salvar print da consulta =====
-$("printBtn").addEventListener("click", async () => {
-  const btn = $("printBtn"), label = btn.querySelector("span");
-  btn.disabled = true; label.textContent = "Gerando imagem…";
+// ===== Print da consulta: copia a imagem (Ctrl+V no WhatsApp) =====
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+async function renderShot(){
   const shot = $("shot");
   const now = new Date();
   $("shotDate").textContent = now.toLocaleDateString("pt-BR") + " às " + now.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
@@ -236,25 +236,47 @@ $("printBtn").addEventListener("click", async () => {
   try {
     if (document.fonts && document.fonts.ready) await document.fonts.ready;
     const canvas = await html2canvas(shot, { scale: 3, backgroundColor: "#ffffff" });
-    const blob = await new Promise(r => canvas.toBlob(r, "image/png"));
-    const cpf = $("cpfShow").textContent.replace(/\D/g,"");
-    const fileName = `consulta-facilita-cell-${cpf}.png`;
-    const file = new File([blob], fileName, { type: "image/png" });
-    // No celular: abre o menu de compartilhar (WhatsApp, Galeria…)
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: "Consulta Facilita Cell" }); }
-      catch (e) { if (e.name !== "AbortError") download(blob, fileName); }
+    return await new Promise(r => canvas.toBlob(r, "image/png"));
+  } finally {
+    shot.classList.remove("capturing");
+  }
+}
+
+$("printBtn").addEventListener("click", async () => {
+  const btn = $("printBtn"), label = btn.querySelector("span");
+  btn.disabled = true; label.textContent = "Gerando imagem…";
+  const cpf = $("cpfShow").textContent.replace(/\D/g,"");
+  const fileName = `consulta-facilita-cell-${cpf}.png`;
+  const blobPromise = renderShot();
+  let msg = "Print salvo ✓";
+  try {
+    if (isMobile) {
+      // Celular: abre o menu de compartilhar (escolher WhatsApp)
+      const blob = await blobPromise;
+      const file = new File([blob], fileName, { type: "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ files: [file] }); msg = "Pronto ✓"; }
+        catch (e) { if (e.name !== "AbortError") download(blob, fileName); }
+      } else { download(blob, fileName); }
     } else {
-      download(blob, fileName);
+      // Computador: copia a imagem para a área de transferência
+      try {
+        // A cópia precisa começar no clique, por isso passamos a "promessa" da imagem
+        await navigator.clipboard.write([ new ClipboardItem({ "image/png": blobPromise }) ]);
+        msg = "Copiado! Cole no WhatsApp com Ctrl+V";
+      } catch (e) {
+        console.warn("Clipboard falhou, baixando o arquivo", e);
+        download(await blobPromise, fileName);
+        msg = "Imagem baixada ✓";
+      }
     }
-    label.textContent = "Print salvo ✓";
+    label.textContent = msg;
   } catch (e) {
     console.error(e);
     label.textContent = "Erro ao gerar — tente de novo";
   } finally {
-    shot.classList.remove("capturing");
     btn.disabled = false;
-    setTimeout(() => label.textContent = "Salvar print", 2500);
+    setTimeout(() => label.textContent = "Copiar print", 3500);
   }
 });
 function download(blob, name){
